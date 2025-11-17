@@ -1,0 +1,48 @@
+﻿@model ChatApp.Web.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Giriş Yap";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-4">
+        <div class="card shadow">
+            <div class="card-body p-5">
+                <h2 class="text-center mb-4">💬 ChatApp</h2>
+                <p class="text-center text-muted mb-4">Hesabına giriş yap</p>
+
+                <form asp-action="Login" method="post">
+                    <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Username" class="form-label">Kullanıcı Adı</label>
+                        <input asp-for="Username" class="form-control" placeholder="Kullanıcı adınız" autofocus />
+                        <span asp-validation-for="Username" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Password" class="form-label">Şifre</label>
+                        <input asp-for="Password" class="form-control" placeholder="Şifreniz" />
+                        <span asp-validation-for="Password" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input asp-for="RememberMe" class="form-check-input" />
+                        <label asp-for="RememberMe" class="form-check-label">Beni Hatırla</label>
+                    </div>
+
+                    <div class="d-grid mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg">Giriş Yap</button>
+                    </div>
+
+                    <div class="text-center">
+                        <p class="mb-0">Hesabın yok mu? <a asp-action="Register" class="text-decoration-none">Kayıt Ol</a></p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

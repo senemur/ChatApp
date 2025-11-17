@@ -1,0 +1,61 @@
+﻿@model ChatApp.Web.Models.RegisterViewModel
+@{
+    ViewData["Title"] = "Kayıt Ol";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow">
+            <div class="card-body p-5">
+                <h2 class="text-center mb-4">💬 ChatApp'e Katıl</h2>
+                <p class="text-center text-muted mb-4">Hesap oluştur ve sohbete başla</p>
+
+                <form asp-action="Register" method="post">
+                    <div asp-validation-summary="All" class="text-danger mb-3"></div>
+
+                    <div class="mb-3">
+                        <label asp-for="Username" class="form-label">Kullanıcı Adı</label>
+                        <input asp-for="Username" class="form-control" placeholder="ornek_kullanici" />
+                        <span asp-validation-for="Username" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Email" class="form-label">Email</label>
+                        <input asp-for="Email" class="form-control" placeholder="ornek@email.com" />
+                        <span asp-validation-for="Email" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="DisplayName" class="form-label">Görünen Ad</label>
+                        <input asp-for="DisplayName" class="form-control" placeholder="Adınız Soyadınız" />
+                        <span asp-validation-for="DisplayName" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="Password" class="form-label">Şifre</label>
+                        <input asp-for="Password" class="form-control" placeholder="En az 6 karakter" />
+                        <span asp-validation-for="Password" class="text-danger"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label asp-for="ConfirmPassword" class="form-label">Şifre Tekrar</label>
+                        <input asp-for="ConfirmPassword" class="form-control" placeholder="Şifrenizi tekrar girin" />
+                        <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+                    </div>
+
+                    <div class="d-grid mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg">Kayıt Ol</button>
+                    </div>
+
+                    <div class="text-center">
+                        <p class="mb-0">Zaten hesabın var mı? <a asp-action="Login" class="text-decoration-none">Giriş Yap</a></p>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+        <partial name="_ValidationScriptsPartial" />
+}
