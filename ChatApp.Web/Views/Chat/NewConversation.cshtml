@@ -1,35 +1,47 @@
-﻿//yeni sohbet başlat
-@model IEnumerable<dynamic>
+﻿@model IEnumerable<dynamic>
 @{
     ViewData["Title"] = "Yeni Sohbet";
 }
 
 <div class="container mt-4">
     <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card shadow">
-                <div class="card-body">
-                    <h2 class="card-title mb-4">➕ Yeni Sohbet Başlat</h2>
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="p-3 border-bottom">
+                        <h4 class="mb-3">Yeni sohbet başlat</h4>
+
+                        @if (Model.Any())
+                        {
+                            <input type="text"
+                                   id="searchUser"
+                                   class="form-control user-search-input"
+                                   placeholder="🔍 İsim veya kullanıcı adı ara..." />
+                        }
+                    </div>
 
                     @if (Model.Any())
                     {
-                        <div class="mb-3">
-                            <input type="text" id="searchUser" class="form-control" placeholder="🔍 Kullanıcı ara..." />
-                        </div>
-
-                        <div class="list-group" id="userList">
+                        <div class="conversation-list" id="userList">
                             @foreach (var user in Model)
                             {
-                                <div class="list-group-item list-group-item-action user-item" data-username="@user.UserName.ToLower()" data-displayname="@user.DisplayName.ToLower()">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h5 class="mb-0">@user.DisplayName</h5>
-                                            <small class="text-muted">@("@" + user.UserName)</small>
+                                <div class="list-group-item user-item"
+                                     data-username="@user.UserName.ToLower()"
+                                     data-displayname="@user.DisplayName.ToLower()">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center">
+                                            <div class="conversation-avatar">
+                                                @user.DisplayName.Substring(0, 1).ToUpper()
+                                            </div>
+                                            <div>
+                                                <div class="conversation-name">@user.DisplayName</div>
+                                                <small class="text-muted">@("@" + user.UserName)</small>
+                                            </div>
                                         </div>
                                         <form asp-action="CreateConversation" method="post" class="d-inline">
                                             <input type="hidden" name="participantId" value="@user.Id" />
                                             <button type="submit" class="btn btn-primary btn-sm">
-                                                💬 Sohbet Başlat
+                                                💬 Sohbet
                                             </button>
                                         </form>
                                     </div>
@@ -39,12 +51,14 @@
                     }
                     else
                     {
-                        <div class="alert alert-warning">
-                            <p class="mb-0">Henüz başka kullanıcı yok. İlk kullanıcısın! 🎉</p>
+                        <div class="text-center p-5">
+                            <div class="mb-3" style="font-size: 4rem;">👥</div>
+                            <h5 class="text-muted">Henüz başka kullanıcı yok</h5>
+                            <p class="text-muted">İlk kullanıcısın! 🎉</p>
                         </div>
                     }
 
-                    <div class="mt-4">
+                    <div class="p-3 border-top">
                         <a asp-action="Index" class="btn btn-secondary">← Sohbetlere Dön</a>
                     </div>
                 </div>
@@ -56,20 +70,23 @@
 @section Scripts {
     <script>
         // Kullanıcı arama
-        document.getElementById('searchUser').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const userItems = document.querySelectorAll('.user-item');
+        const searchInput = document.getElementById('searchUser');
+        if (searchInput) {
+            searchInput.addEventListener('input', function (e) {
+                const searchTerm = e.target.value.toLowerCase();
+                const userItems = document.querySelectorAll('.user-item');
 
-            userItems.forEach(item => {
-                const username = item.dataset.username;
-                const displayname = item.dataset.displayname;
+                userItems.forEach(item => {
+                    const username = item.dataset.username;
+                    const displayname = item.dataset.displayname;
 
-                if (username.includes(searchTerm) || displayname.includes(searchTerm)) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
+                    if (username.includes(searchTerm) || displayname.includes(searchTerm)) {
+                        item.style.display = 'block';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
             });
-        });
+        }
     </script>
 }

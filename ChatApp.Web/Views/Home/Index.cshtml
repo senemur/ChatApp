@@ -2,48 +2,81 @@
     ViewData["Title"] = "Ana Sayfa";
 }
 
-<div class="text-center mt-5">
-    <h1 class="display-4">💬 ChatApp'e Hoş Geldiniz</h1>
-    <p class="lead mt-4">Gerçek zamanlı mesajlaşma deneyimini keşfedin</p>
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-lg-8 text-center">
+            <div style="font-size: 5rem; margin-bottom: 20px;">💬</div>
+            <h1 class="display-4 mb-4">ChatApp</h1>
+            <p class="lead text-muted mb-5">
+                Arkadaşlarınla anında bağlan. Gerçek zamanlı, güvenli mesajlaşma deneyimi.
+            </p>
 
-    <div class="row mt-5">
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">⚡ Gerçek Zamanlı</h5>
-                    <p class="card-text">SignalR ile anlık mesajlaşma</p>
+            @if (!User.Identity.IsAuthenticated)
+            {
+                <div class="d-flex gap-3 justify-content-center mb-5">
+                    <a asp-controller="Account" asp-action="Register" class="btn btn-primary btn-lg px-5">
+                        Hemen Başla
+                    </a>
+                    <a asp-controller="Account" asp-action="Login" class="btn btn-outline-secondary btn-lg px-5">
+                        Giriş Yap
+                    </a>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">👥 Grup Sohbetleri</h5>
-                    <p class="card-text">Arkadaşlarınla grup oluştur</p>
+            }
+            else
+            {
+                <div class="mb-5">
+                    <a asp-controller="Chat" asp-action="Index" class="btn btn-primary btn-lg px-5">
+                        💬 Sohbetlere Git
+                    </a>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">🔒 Güvenli</h5>
-                    <p class="card-text">ASP.NET Identity ile korumalı</p>
+            }
+
+            <div class="row mt-5 g-4">
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <div style="font-size: 3rem; margin-bottom: 15px;">⚡</div>
+                            <h5 class="card-title">Anlık Mesajlaşma</h5>
+                            <p class="card-text text-muted">
+                                SignalR teknolojisi ile gerçek zamanlı iletişim
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <div style="font-size: 3rem; margin-bottom: 15px;">🔒</div>
+                            <h5 class="card-title">Güvenli</h5>
+                            <p class="card-text text-muted">
+                                ASP.NET Identity ile korumalı sistem
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body text-center p-4">
+                            <div style="font-size: 3rem; margin-bottom: 15px;">📱</div>
+                            <h5 class="card-title">Responsive</h5>
+                            <p class="card-text text-muted">
+                                Her cihazda mükemmel görünüm
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-
-    @if (!User.Identity.IsAuthenticated)
-    {
-        <div class="mt-5">
-            <a asp-controller="Account" asp-action="Register" class="btn btn-primary btn-lg me-3">Hemen Başla</a>
-            <a asp-controller="Account" asp-action="Login" class="btn btn-outline-secondary btn-lg">Giriş Yap</a>
-        </div>
-    }
-    else
-    {
-        <div class="mt-5">
-            <a asp-controller="Chat" asp-action="Index" class="btn btn-primary btn-lg">Sohbetlere Git</a>
-        </div>
-    }
 </div>
+
+<style>
+    .card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12) !important;
+    }
+</style>

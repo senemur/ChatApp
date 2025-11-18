@@ -1,103 +1,162 @@
-﻿//sohbet sayfası(mesajlaşma)
-@model ChatApp.Domain.Entities.Conversation
+﻿@model ChatApp.Domain.Entities.Conversation
 @{
     ViewData["Title"] = "Sohbet";
+    Layout = null;
     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
     var otherUser = Model.Participants.FirstOrDefault(p => p.UserId != userId)?.User;
     var conversationName = Model.IsGroup ? Model.Name : otherUser?.DisplayName ?? "Bilinmeyen";
+    var otherUserId = otherUser?.Id;
 }
 
-<div class="container-fluid vh-100 d-flex flex-column p-0">
-    <!-- Header -->
-    <div class="bg-primary text-white p-3 shadow">
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center">
-                <a asp-action="Index" class="btn btn-light btn-sm me-3">← Geri</a>
-                <div>
-                    <h4 class="mb-0">
-                        @if (Model.IsGroup)
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@conversationName - ChatApp</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <style>
+        /* Tarayıcı default margin/padding'i kaldır */
+        html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100%;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0;">
+    <div class="chat-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <a asp-action="Index" class="btn btn-sm btn-light me-2">
+                ←
+            </a>
+            <div class="user-avatar">
+                @if (Model.IsGroup)
+                {
+                    <span>👥</span>
+                }
+                else
+                {
+                    <span>@conversationName.Substring(0, 1).ToUpper()</span>
+                }
+            </div>
+            <div class="chat-header-info flex-grow-1">
+                <h4>@conversationName</h4>
+                @if (!Model.IsGroup && otherUser != null)
+                {
+                    <small id="userStatus">
+                        @if (otherUser.LastSeenAt.HasValue)
                         {
-                            <span>👥</span>
-                        }
-                        else
-                        {
-                            <span>👤</span>
-                        }
-                        @conversationName
-                    </h4>
-                    @if (!Model.IsGroup && otherUser != null)
-                    {
-                        <small id="userStatus">
-                            @if (otherUser.LastSeenAt.HasValue)
+                            var diff = DateTime.UtcNow - otherUser.LastSeenAt.Value;
+                            if (diff.TotalMinutes < 2)
                             {
-                                var diff = DateTime.UtcNow - otherUser.LastSeenAt.Value;
-                                if (diff.TotalMinutes < 2)
+                                <span><span class="online-indicator"></span>çevrimiçi</span>
+                            }
+                            else
+                            {
+                                <span>son görülme: bugün @otherUser.LastSeenAt.Value.ToLocalTime().ToString("HH:mm")</span>
+                            }
+                        }
+                    </small>
+                    <small id="typingIndicator" style="display: none;">
+                        yazıyor...
+                    </small>
+                }
+                else if (Model.IsGroup)
+                {
+                    <small>@Model.Participants.Count() katılımcı</small>
+                }
+            </div>
+        </div>
+
+        <!-- Messages Area -->
+        <div id="messagesContainer">
+            <div id="messagesList">
+                @{
+                    DateTime? lastDate = null;
+                }
+                @foreach (var message in Model.Messages.OrderBy(m => m.SentAt))
+                {
+                    var isMine = message.SenderId == userId;
+                    var messageDate = message.SentAt.ToLocalTime().Date;
+
+                    // Tarih separator
+                    if (lastDate == null || messageDate != lastDate)
+                    {
+                        <div class="date-separator">
+                            <span class="date-label">
+                                @if (messageDate == DateTime.Today)
                                 {
-                                    <span class="text-success">● Online</span>
+                                    @:BUGÜN
+                                }
+                                else if (messageDate == DateTime.Today.AddDays(-1))
+                                {
+                                    @:DÜN
                                 }
                                 else
                                 {
-                                    <span>Son görülme: @otherUser.LastSeenAt.Value.ToLocalTime().ToString("HH:mm")</span>
+                                    @messageDate.ToString("dd.MM.yyyy")
                                 }
-                            }
-                        </small>
+                            </span>
+                        </div>
+                        lastDate = messageDate;
                     }
-                    <small id="typingIndicator" class="text-warning" style="display: none;">yazıyor...</small>
-                </div>
-            </div>
-            @if (Model.IsGroup)
-            {
-                <div>
-                    <small>@Model.Participants.Count() katılımcı</small>
-                </div>
-            }
-        </div>
-    </div>
 
-    <!-- Messages Area -->
-    <div class="flex-grow-1 overflow-auto p-3 bg-light" id="messagesContainer" style="height: calc(100vh - 200px);">
-        <div id="messagesList">
-            @foreach (var message in Model.Messages.OrderBy(m => m.SentAt))
-            {
-                var isMine = message.SenderId == userId;
-                <div class="mb-3 d-flex @(isMine ? "justify-content-end" : "justify-content-start")">
-                    <div class="@(isMine ? "bg-primary text-white" : "bg-white") p-3 rounded shadow-sm" style="max-width: 70%;">
-                        @if (Model.IsGroup && !isMine)
-                        {
-                            <small class="fw-bold text-muted">@message.Sender.DisplayName</small>
-                            <br />
-                        }
-                        <div>@message.Content</div>
-                        <small class="@(isMine ? "text-white-50" : "text-muted") d-block text-end mt-1">
-                            @message.SentAt.ToLocalTime().ToString("HH:mm")
-                        </small>
+                    <div class="message-wrapper @(isMine ? "mine" : "theirs")">
+                        <div class="message-bubble @(isMine ? "mine" : "theirs")">
+                            @if (Model.IsGroup && !isMine)
+                            {
+                                <div class="message-sender">@message.Sender.DisplayName</div>
+                            }
+                            <div class="message-content">@message.Content</div>
+                            <div class="message-time">
+                                @message.SentAt.ToLocalTime().ToString("HH:mm")
+                                @if (isMine)
+                                {
+                                    <span class="message-status">✓✓</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Typing Indicator -->
+            <div id="typingBubble" style="display: none;">
+                <div class="typing-wrapper">
+                    <div class="typing-bubble">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
                     </div>
                 </div>
-            }
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="chat-input-container">
+            <form id="messageForm" class="chat-input-wrapper">
+                <input type="text"
+                       id="messageInput"
+                       class="form-control"
+                       placeholder="Bir mesaj yazın"
+                       autocomplete="off"
+                       maxlength="1000" />
+                <button type="submit" class="send-button">
+                    <span>➤</span>
+                </button>
+            </form>
         </div>
     </div>
 
-    <!-- Input Area -->
-    <div class="bg-white border-top p-3">
-        <form id="messageForm" class="d-flex gap-2">
-            <input type="text"
-                   id="messageInput"
-                   class="form-control"
-                   placeholder="Mesajınızı yazın..."
-                   autocomplete="off"
-                   maxlength="1000" />
-            <button type="submit" class="btn btn-primary px-4">
-                📤 Gönder
-            </button>
-        </form>
-    </div>
-</div>
-
-@section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
         const conversationId = @Model.Id;
         const currentUserId = '@userId';
+        const otherUserId = '@otherUserId';
 
         // SignalR bağlantısı
         const connection = new signalR.HubConnectionBuilder()
@@ -105,13 +164,12 @@
             .withAutomaticReconnect()
             .build();
 
-        // Bağlantıyı başlat
         connection.start()
             .then(() => {
-                console.log("SignalR bağlantısı başarılı!");
+                console.log("✅ Bağlantı başarılı");
                 connection.invoke("JoinConversation", conversationId);
             })
-            .catch(err => console.error("SignalR bağlantı hatası:", err));
+            .catch(err => console.error("❌ Bağlantı hatası:", err));
 
         // Mesaj alma
         connection.on("ReceiveMessage", (message) => {
@@ -123,12 +181,32 @@
 
         // Yazıyor göstergesi
         connection.on("UserTyping", (userId, userName) => {
-            document.getElementById("typingIndicator").style.display = "inline";
-            document.getElementById("typingIndicator").innerText = userName + " yazıyor...";
+            if (userId !== currentUserId) {
+                document.getElementById("typingIndicator").style.display = "block";
+                document.getElementById("typingBubble").style.display = "block";
+                scrollToBottom();
+            }
         });
 
-        connection.on("UserStoppedTyping", () => {
-            document.getElementById("typingIndicator").style.display = "none";
+        connection.on("UserStoppedTyping", (userId) => {
+            if (userId !== currentUserId) {
+                document.getElementById("typingIndicator").style.display = "none";
+                document.getElementById("typingBubble").style.display = "none";
+            }
+        });
+
+        // Online/Offline durumu
+        connection.on("UserOnline", (userId) => {
+            if (userId === otherUserId) {
+                document.getElementById("userStatus").innerHTML = '<span class="online-indicator"></span>çevrimiçi';
+            }
+        });
+
+        connection.on("UserOffline", (userId, lastSeenAt) => {
+            if (userId === otherUserId) {
+                const time = new Date(lastSeenAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                document.getElementById("userStatus").innerHTML = `son görülme: bugün ${time}`;
+            }
         });
 
         // Mesaj gönderme
@@ -140,58 +218,85 @@
 
             if (message) {
                 connection.invoke("SendMessage", conversationId, message)
-                    .catch(err => console.error("Mesaj gönderme hatası:", err));
+                    .catch(err => console.error("Gönderme hatası:", err));
 
                 input.value = "";
                 connection.invoke("StopTyping", conversationId);
+                input.focus();
             }
         });
 
         // Yazıyor göstergesi
         let typingTimer;
-        document.getElementById("messageInput").addEventListener("input", () => {
-            clearTimeout(typingTimer);
-            connection.invoke("StartTyping", conversationId);
+        let isTyping = false;
 
+        document.getElementById("messageInput").addEventListener("input", (e) => {
+            if (e.target.value.trim() && !isTyping) {
+                connection.invoke("StartTyping", conversationId);
+                isTyping = true;
+            }
+
+            clearTimeout(typingTimer);
             typingTimer = setTimeout(() => {
-                connection.invoke("StopTyping", conversationId);
-            }, 2000);
+                if (isTyping) {
+                    connection.invoke("StopTyping", conversationId);
+                    isTyping = false;
+                }
+            }, 1500);
         });
 
         // UI'a mesaj ekleme
         function addMessageToUI(message, isMine) {
             const messagesDiv = document.getElementById("messagesList");
 
-            const messageDiv = document.createElement("div");
-            messageDiv.className = `mb-3 d-flex ${isMine ? "justify-content-end" : "justify-content-start"}`;
+            const messageWrapper = document.createElement("div");
+            messageWrapper.className = `message-wrapper ${isMine ? "mine" : "theirs"}`;
 
-            messageDiv.innerHTML = `
-                <div class="${isMine ? "bg-primary text-white" : "bg-white"} p-3 rounded shadow-sm" style="max-width: 70%;">
-                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<small class="fw-bold text-muted">${message.senderName}</small><br />` : ''}
-                    <div>${escapeHtml(message.content)}</div>
-                    <small class="${isMine ? "text-white-50" : "text-muted"} d-block text-end mt-1">
-                        ${message.sentAt}
-                    </small>
-                </div>
-            `;
+            messageWrapper.innerHTML = `
+                        <div class="message-bubble ${isMine ? "mine" : "theirs"}">
+                            ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender">${escapeHtml(message.senderName)}</div>` : ''}
+                            <div class="message-content">${escapeHtml(message.content)}</div>
+                            <div class="message-time">
+                                ${message.sentAt}
+                                ${isMine ? '<span class="message-status">✓</span>' : ''}
+                            </div>
+                        </div>
+                    `;
 
-            messagesDiv.appendChild(messageDiv);
+            messagesDiv.appendChild(messageWrapper);
         }
 
-        // HTML escape (XSS koruması)
+        // HTML escape
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // Scroll en alta
+        // Scroll
         function scrollToBottom() {
             const container = document.getElementById("messagesContainer");
-            container.scrollTop = container.scrollHeight;
+            setTimeout(() => {
+                container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }, 100);
         }
 
-        // Sayfa yüklendiğinde en alta scroll
-        window.addEventListener("load", scrollToBottom);
+        // Enter ile gönder
+        document.getElementById("messageInput").addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById("messageForm").dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Sayfa yüklenince
+        window.addEventListener("load", () => {
+            scrollToBottom();
+            document.getElementById("messageInput").focus();
+        });
     </script>
-}
+</body>
+</html>
