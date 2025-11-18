@@ -1,0 +1,197 @@
+﻿//sohbet sayfası(mesajlaşma)
+@model ChatApp.Domain.Entities.Conversation
+@{
+    ViewData["Title"] = "Sohbet";
+    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+    var otherUser = Model.Participants.FirstOrDefault(p => p.UserId != userId)?.User;
+    var conversationName = Model.IsGroup ? Model.Name : otherUser?.DisplayName ?? "Bilinmeyen";
+}
+
+<div class="container-fluid vh-100 d-flex flex-column p-0">
+    <!-- Header -->
+    <div class="bg-primary text-white p-3 shadow">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <a asp-action="Index" class="btn btn-light btn-sm me-3">← Geri</a>
+                <div>
+                    <h4 class="mb-0">
+                        @if (Model.IsGroup)
+                        {
+                            <span>👥</span>
+                        }
+                        else
+                        {
+                            <span>👤</span>
+                        }
+                        @conversationName
+                    </h4>
+                    @if (!Model.IsGroup && otherUser != null)
+                    {
+                        <small id="userStatus">
+                            @if (otherUser.LastSeenAt.HasValue)
+                            {
+                                var diff = DateTime.UtcNow - otherUser.LastSeenAt.Value;
+                                if (diff.TotalMinutes < 2)
+                                {
+                                    <span class="text-success">● Online</span>
+                                }
+                                else
+                                {
+                                    <span>Son görülme: @otherUser.LastSeenAt.Value.ToLocalTime().ToString("HH:mm")</span>
+                                }
+                            }
+                        </small>
+                    }
+                    <small id="typingIndicator" class="text-warning" style="display: none;">yazıyor...</small>
+                </div>
+            </div>
+            @if (Model.IsGroup)
+            {
+                <div>
+                    <small>@Model.Participants.Count() katılımcı</small>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Messages Area -->
+    <div class="flex-grow-1 overflow-auto p-3 bg-light" id="messagesContainer" style="height: calc(100vh - 200px);">
+        <div id="messagesList">
+            @foreach (var message in Model.Messages.OrderBy(m => m.SentAt))
+            {
+                var isMine = message.SenderId == userId;
+                <div class="mb-3 d-flex @(isMine ? "justify-content-end" : "justify-content-start")">
+                    <div class="@(isMine ? "bg-primary text-white" : "bg-white") p-3 rounded shadow-sm" style="max-width: 70%;">
+                        @if (Model.IsGroup && !isMine)
+                        {
+                            <small class="fw-bold text-muted">@message.Sender.DisplayName</small>
+                            <br />
+                        }
+                        <div>@message.Content</div>
+                        <small class="@(isMine ? "text-white-50" : "text-muted") d-block text-end mt-1">
+                            @message.SentAt.ToLocalTime().ToString("HH:mm")
+                        </small>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Input Area -->
+    <div class="bg-white border-top p-3">
+        <form id="messageForm" class="d-flex gap-2">
+            <input type="text"
+                   id="messageInput"
+                   class="form-control"
+                   placeholder="Mesajınızı yazın..."
+                   autocomplete="off"
+                   maxlength="1000" />
+            <button type="submit" class="btn btn-primary px-4">
+                📤 Gönder
+            </button>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        const conversationId = @Model.Id;
+        const currentUserId = '@userId';
+
+        // SignalR bağlantısı
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/chathub")
+            .withAutomaticReconnect()
+            .build();
+
+        // Bağlantıyı başlat
+        connection.start()
+            .then(() => {
+                console.log("SignalR bağlantısı başarılı!");
+                connection.invoke("JoinConversation", conversationId);
+            })
+            .catch(err => console.error("SignalR bağlantı hatası:", err));
+
+        // Mesaj alma
+        connection.on("ReceiveMessage", (message) => {
+            if (message.conversationId === conversationId) {
+                addMessageToUI(message, message.senderId === currentUserId);
+                scrollToBottom();
+            }
+        });
+
+        // Yazıyor göstergesi
+        connection.on("UserTyping", (userId, userName) => {
+            document.getElementById("typingIndicator").style.display = "inline";
+            document.getElementById("typingIndicator").innerText = userName + " yazıyor...";
+        });
+
+        connection.on("UserStoppedTyping", () => {
+            document.getElementById("typingIndicator").style.display = "none";
+        });
+
+        // Mesaj gönderme
+        document.getElementById("messageForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const input = document.getElementById("messageInput");
+            const message = input.value.trim();
+
+            if (message) {
+                connection.invoke("SendMessage", conversationId, message)
+                    .catch(err => console.error("Mesaj gönderme hatası:", err));
+
+                input.value = "";
+                connection.invoke("StopTyping", conversationId);
+            }
+        });
+
+        // Yazıyor göstergesi
+        let typingTimer;
+        document.getElementById("messageInput").addEventListener("input", () => {
+            clearTimeout(typingTimer);
+            connection.invoke("StartTyping", conversationId);
+
+            typingTimer = setTimeout(() => {
+                connection.invoke("StopTyping", conversationId);
+            }, 2000);
+        });
+
+        // UI'a mesaj ekleme
+        function addMessageToUI(message, isMine) {
+            const messagesDiv = document.getElementById("messagesList");
+
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `mb-3 d-flex ${isMine ? "justify-content-end" : "justify-content-start"}`;
+
+            messageDiv.innerHTML = `
+                <div class="${isMine ? "bg-primary text-white" : "bg-white"} p-3 rounded shadow-sm" style="max-width: 70%;">
+                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<small class="fw-bold text-muted">${message.senderName}</small><br />` : ''}
+                    <div>${escapeHtml(message.content)}</div>
+                    <small class="${isMine ? "text-white-50" : "text-muted"} d-block text-end mt-1">
+                        ${message.sentAt}
+                    </small>
+                </div>
+            `;
+
+            messagesDiv.appendChild(messageDiv);
+        }
+
+        // HTML escape (XSS koruması)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Scroll en alta
+        function scrollToBottom() {
+            const container = document.getElementById("messagesContainer");
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Sayfa yüklendiğinde en alta scroll
+        window.addEventListener("load", scrollToBottom);
+    </script>
+}

@@ -1,0 +1,77 @@
+﻿//sohbet listesi
+@model IEnumerable<ChatApp.Domain.Entities.Conversation>
+@{
+    ViewData["Title"] = "Sohbetler";
+}
+
+<div class="container-fluid mt-3">
+    <div class="row">
+        <div class="col-12 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2>💬 Sohbetlerim</h2>
+                <a asp-action="NewConversation" class="btn btn-primary">
+                    ➕ Yeni Sohbet
+                </a>
+            </div>
+            <hr />
+        </div>
+    </div>
+
+    <div class="row">
+        @if (Model.Any())
+        {
+            <div class="col-12">
+                <div class="list-group">
+                    @foreach (var conversation in Model)
+                    {
+                        var otherUser = conversation.Participants
+                        .FirstOrDefault(p => p.UserId != User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value)?.User;
+
+                        var conversationName = conversation.IsGroup
+                        ? conversation.Name
+                        : otherUser?.DisplayName ?? "Bilinmeyen";
+
+                        var lastMessage = conversation.Messages.FirstOrDefault();
+                        var lastMessageText = lastMessage?.Content ?? "Henüz mesaj yok";
+                        var lastMessageTime = lastMessage?.SentAt.ToString("HH:mm") ?? "";
+
+                        <a asp-action="Conversation" asp-route-id="@conversation.Id"
+                           class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <div>
+                                    <h5 class="mb-1">
+                                        @if (conversation.IsGroup)
+                                        {
+                                            <span>👥</span>
+                                        }
+                                        else
+                                        {
+                                            <span>👤</span>
+                                        }
+                                        @conversationName
+                                    </h5>
+                                    <p class="mb-1 text-muted">
+                                        @(lastMessageText.Length > 50 ? lastMessageText.Substring(0, 50) + "..." : lastMessageText)
+                                    </p>
+                                </div>
+                                <small class="text-muted">@lastMessageTime</small>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="col-12 text-center mt-5">
+                <div class="alert alert-info">
+                    <h4>📭 Henüz sohbetiniz yok</h4>
+                    <p>Yeni bir sohbet başlatmak için <strong>"Yeni Sohbet"</strong> butonuna tıklayın.</p>
+                    <a asp-action="NewConversation" class="btn btn-primary mt-3">
+                        ➕ Yeni Sohbet Başlat
+                    </a>
+                </div>
+            </div>
+        }
+    </div>
+</div>

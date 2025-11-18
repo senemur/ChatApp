@@ -9,6 +9,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
+// SignalR
+builder.Services.AddSignalR();
+
 // Database Configuration
 builder.Services.AddDbContext<ChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -52,6 +55,9 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// SignalR Hub
+app.MapHub<ChatApp.Web.Hubs.ChatHub>("/chathub");
 
 app.MapControllerRoute(
     name: "default",
