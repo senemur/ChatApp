@@ -19,7 +19,6 @@ namespace ChatApp.Web.Controllers
             _context = context;
             _userManager = userManager;
         }
-
         // GET: /Chat
         public async Task<IActionResult> Index()
         {
@@ -32,12 +31,26 @@ namespace ChatApp.Web.Controllers
                     .ThenInclude(c => c.Participants)
                     .ThenInclude(p => p.User)
                 .Include(cp => cp.Conversation)
-                    .ThenInclude(c => c.Messages
+                    .ThenInclude(c => c.Messages.Where(m => !m.IsDeleted)
                         .OrderByDescending(m => m.SentAt)
                         .Take(1))
+                    .ThenInclude(m => m.Sender)
                 .Select(cp => cp.Conversation)
-                .OrderByDescending(c => c.Messages.Max(m => (DateTime?)m.SentAt) ?? c.CreatedAt)
+                .OrderByDescending(c => c.Messages.Where(m => !m.IsDeleted).Max(m => (DateTime?)m.SentAt) ?? c.CreatedAt)
                 .ToListAsync();
+
+            // Her konuşma için okunmamış mesaj sayısını hesapla
+            ViewBag.UnreadCounts = new Dictionary<int, int>();
+            foreach (var conversation in conversations)
+            {
+                var unreadCount = await _context.Messages
+                    .CountAsync(m => m.ConversationId == conversation.Id
+                                    && m.SenderId != userId
+                                    && !m.IsRead
+                                    && !m.IsDeleted);
+
+                ViewBag.UnreadCounts[conversation.Id] = unreadCount;
+            }
 
             return View(conversations);
         }
@@ -141,6 +154,60 @@ namespace ChatApp.Web.Controllers
             await _context.SaveChangesAsync();
 
             return RedirectToAction("Conversation", new { id = conversation.Id });
+        }
+
+        // POST: /Chat/DeleteMessage
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteMessage(int messageId)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var message = await _context.Messages.FindAsync(messageId);
+
+            if (message == null)
+                return NotFound();
+
+            // Sadece kendi mesajını silebilir
+            if (message.SenderId != userId)
+                return Forbid();
+
+            _context.Messages.Remove(message);
+            await _context.SaveChangesAsync();
+
+            return Ok();
+        }
+
+        // POST: /Chat/EditMessage
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditMessage(int messageId, string content)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var message = await _context.Messages.FindAsync(messageId);
+
+            if (message == null)
+                return NotFound();
+
+            // Sadece kendi mesajını düzenleyebilir
+            if (message.SenderId != userId)
+                return Forbid();
+
+            if (string.IsNullOrWhiteSpace(content))
+                return BadRequest("Mesaj boş olamaz");
+
+            message.Content = content.Trim();
+            message.IsEdited = true; // Yeni property ekleyeceğiz
+            message.EditedAt = DateTime.UtcNow; // Yeni property
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                id = message.Id,
+                content = message.Content,
+                isEdited = message.IsEdited,
+                editedAt = message.EditedAt?.ToLocalTime().ToString("HH:mm")
+            });
         }
     }
 }

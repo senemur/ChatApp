@@ -1,6 +1,7 @@
 ﻿@model IEnumerable<ChatApp.Domain.Entities.Conversation>
 @{
     ViewData["Title"] = "Sohbetler";
+    var unreadCounts = ViewBag.UnreadCounts as Dictionary<int, int>;
 }
 
 <div class="container-fluid mt-3">
@@ -29,11 +30,17 @@
                                 : otherUser?.DisplayName ?? "Bilinmeyen";
 
                                 var lastMessage = conversation.Messages.FirstOrDefault();
-                                var lastMessageText = lastMessage?.Content ?? "Henüz mesaj yok";
+                                var lastMessageText = lastMessage != null
+                                ? (lastMessage.SenderId == userId ? "Sen: " : "") + lastMessage.Content
+                                : "Henüz mesaj yok";
                                 var lastMessageTime = lastMessage?.SentAt.ToLocalTime().ToString("HH:mm") ?? "";
 
+                                var unreadCount = unreadCounts != null && unreadCounts.ContainsKey(conversation.Id)
+                                ? unreadCounts[conversation.Id]
+                                : 0;
+
                                 <a asp-action="Conversation" asp-route-id="@conversation.Id"
-                                   class="list-group-item">
+                                   class="list-group-item @(unreadCount > 0 ? "has-unread" : "")">
                                     <div class="d-flex align-items-center">
                                         <div class="conversation-avatar">
                                             @if (conversation.IsGroup)
@@ -47,10 +54,23 @@
                                         </div>
                                         <div class="conversation-info">
                                             <div class="d-flex justify-content-between align-items-start">
-                                                <div class="conversation-name">@conversationName</div>
-                                                <div class="conversation-time">@lastMessageTime</div>
+                                                <div class="conversation-name @(unreadCount > 0 ? "fw-bold" : "")">
+                                                    @conversationName
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    @if (!string.IsNullOrEmpty(lastMessageTime))
+                                                    {
+                                                        <div class="conversation-time @(unreadCount > 0 ? "text-success fw-bold" : "")">
+                                                            @lastMessageTime
+                                                        </div>
+                                                    }
+                                                    @if (unreadCount > 0)
+                                                    {
+                                                        <span class="unread-badge">@unreadCount</span>
+                                                    }
+                                                </div>
                                             </div>
-                                            <div class="conversation-last-message">
+                                            <div class="conversation-last-message @(unreadCount > 0 ? "fw-semibold" : "")">
                                                 @(lastMessageText.Length > 40 ? lastMessageText.Substring(0, 40) + "..." : lastMessageText)
                                             </div>
                                         </div>
@@ -74,4 +94,121 @@
             </div>
         </div>
     </div>
+
+    @section Scripts {
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+        <script>
+            // SignalR bağlantısı (Index sayfası için)
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/chathub")
+                .withAutomaticReconnect()
+                .build();
+
+            connection.start()
+                .then(() => console.log("✅ Sohbet listesi SignalR aktif"))
+                .catch(err => console.error("❌ Bağlantı hatası:", err));
+
+            // Sohbet listesi güncelleme
+            connection.on("UpdateConversationList", (data) => {
+                updateConversationItem(data);
+            });
+
+            // Sohbet okundu - badge'i kaldır
+            connection.on("ConversationRead", (conversationId) => {
+                removeUnreadBadge(conversationId);
+            });
+
+            // Mesajlar okundu - badge'i kaldır
+            connection.on("MessagesRead", (messageIds) => {
+                // Index sayfasında badge'leri güncelle
+                // (Gerekirse conversation ID'yi message'lardan bul)
+            });
+
+            function updateConversationItem(data) {
+                const conversationLink = document.querySelector(`a[href*='Conversation/${data.conversationId}']`);
+
+                if (!conversationLink) {
+                    // Sohbet listede yok, sayfayı yenile
+                    location.reload();
+                    return;
+                }
+
+                // Son mesaj metnini güncelle
+                const lastMessageDiv = conversationLink.querySelector('.conversation-last-message');
+                if (lastMessageDiv) {
+                    const prefix = data.isUnread ? '' : 'Sen: ';
+                    const displayText = prefix + data.lastMessage;
+                    lastMessageDiv.textContent = displayText.length > 40
+                        ? displayText.substring(0, 40) + '...'
+                        : displayText;
+
+                    // Okunmamış mesaj varsa bold yap
+                    if (data.isUnread) {
+                        lastMessageDiv.classList.add('fw-semibold');
+                        conversationLink.querySelector('.conversation-name')?.classList.add('fw-bold');
+                    } else {
+                        lastMessageDiv.classList.remove('fw-semibold');
+                        conversationLink.querySelector('.conversation-name')?.classList.remove('fw-bold');
+                    }
+                }
+
+                // Zamanı güncelle
+                const timeDiv = conversationLink.querySelector('.conversation-time');
+                if (timeDiv) {
+                    timeDiv.textContent = data.lastMessageTime;
+
+                    if (data.isUnread) {
+                        timeDiv.classList.add('text-success', 'fw-bold');
+                    } else {
+                        timeDiv.classList.remove('text-success', 'fw-bold');
+                    }
+                }
+
+                // Unread badge ekle/güncelle
+                if (data.isUnread) {
+                    let badgeContainer = conversationLink.querySelector('.d-flex.align-items-center.gap-2');
+                    let badge = badgeContainer?.querySelector('.unread-badge');
+
+                    if (badge) {
+                        // Badge varsa sayıyı artır
+                        const currentCount = parseInt(badge.textContent) || 0;
+                        badge.textContent = currentCount + 1;
+                    } else if (badgeContainer) {
+                        // Badge yoksa oluştur
+                        badge = document.createElement('span');
+                        badge.className = 'unread-badge';
+                        badge.textContent = '1';
+                        badgeContainer.appendChild(badge);
+                    }
+
+                    // Arka plan rengini değiştir
+                    conversationLink.classList.add('has-unread');
+                }
+
+                // Sohbeti en üste taşı
+                const conversationList = conversationLink.parentElement;
+                if (conversationList.firstChild !== conversationLink) {
+                    conversationList.insertBefore(conversationLink, conversationList.firstChild);
+                }
+            }
+
+            function removeUnreadBadge(conversationId) {
+                const conversationLink = document.querySelector(`a[href*='Conversation/${conversationId}']`);
+
+                if (conversationLink) {
+                    // Badge'i kaldır
+                    const badge = conversationLink.querySelector('.unread-badge');
+                    if (badge) {
+                        badge.remove();
+                    }
+
+                    // Arka plan ve bold'u kaldır
+                    conversationLink.classList.remove('has-unread');
+                    conversationLink.querySelector('.conversation-name')?.classList.remove('fw-bold');
+                    conversationLink.querySelector('.conversation-last-message')?.classList.remove('fw-semibold');
+                    conversationLink.querySelector('.conversation-time')?.classList.remove('text-success', 'fw-bold');
+                }
+            }
+        </script>
+    }
 </div>

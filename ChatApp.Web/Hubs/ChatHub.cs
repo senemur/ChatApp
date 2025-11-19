@@ -69,14 +69,12 @@ namespace ChatApp.Web.Hubs
             if (string.IsNullOrWhiteSpace(content) || userId == null)
                 return;
 
-            // Kullanıcının bu konuşmaya erişimi var mı kontrol et
             var hasAccess = await _context.ConversationParticipants
                 .AnyAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId);
 
             if (!hasAccess)
                 return;
 
-            // Mesajı veritabanına kaydet
             var message = new Message
             {
                 ConversationId = conversationId,
@@ -84,16 +82,15 @@ namespace ChatApp.Web.Hubs
                 Content = content.Trim(),
                 SentAt = DateTime.UtcNow,
                 IsRead = false,
-                Type = MessageType.Text
+                Type = MessageType.Text,
+                ReadAt = null
             };
 
             _context.Messages.Add(message);
             await _context.SaveChangesAsync();
 
-            // Gönderici bilgisini yükle
             await _context.Entry(message).Reference(m => m.Sender).LoadAsync();
 
-            // Konuşmadaki diğer kullanıcılara mesajı gönder
             var participants = await _context.ConversationParticipants
                 .Where(cp => cp.ConversationId == conversationId)
                 .Select(cp => cp.UserId)
@@ -107,15 +104,26 @@ namespace ChatApp.Web.Hubs
                 senderName = message.Sender.DisplayName,
                 content = message.Content,
                 sentAt = message.SentAt.ToString("HH:mm"),
-                isRead = message.IsRead
+                isRead = false,
+                readAt = (DateTime?)null
             };
 
-            // Tüm katılımcılara mesajı gönder (grup için)
             foreach (var participantId in participants)
             {
                 if (_userConnections.TryGetValue(participantId, out var connectionId))
                 {
                     await Clients.Client(connectionId).SendAsync("ReceiveMessage", messageDto);
+
+                    // ✨ Sohbet listesi güncellemesi (tüm katılımcılara)
+                    await Clients.Client(connectionId).SendAsync("UpdateConversationList", new
+                    {
+                        conversationId = conversationId,
+                        lastMessage = message.Content,
+                        lastMessageTime = message.SentAt.ToString("HH:mm"),
+                        senderId = message.SenderId,
+                        senderName = message.Sender.DisplayName,
+                        isUnread = participantId != userId // Gönderen için unread değil
+                    });
                 }
             }
         }
@@ -145,6 +153,145 @@ namespace ChatApp.Web.Hubs
 
             await Clients.OthersInGroup($"conversation_{conversationId}")
                 .SendAsync("UserStoppedTyping", userId);
+        }
+
+        public async Task DeleteMessage(int messageId)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            var message = await _context.Messages.FindAsync(messageId);
+
+            if (message == null || message.SenderId != userId)
+                return;
+
+            message.IsDeleted = true;
+            await _context.SaveChangesAsync();
+
+            // Konuşmadaki herkese bildir
+            var participants = await _context.ConversationParticipants
+                .Where(cp => cp.ConversationId == message.ConversationId)
+                .Select(cp => cp.UserId)
+                .ToListAsync();
+
+            foreach (var participantId in participants)
+            {
+                if (_userConnections.TryGetValue(participantId, out var connectionId))
+                {
+                    await Clients.Client(connectionId).SendAsync("MessageDeleted", messageId);
+                }
+            }
+        }
+
+        public async Task EditMessage(int messageId, string newContent)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrWhiteSpace(newContent))
+                return;
+
+            var message = await _context.Messages.FindAsync(messageId);
+
+            if (message == null || message.SenderId != userId)
+                return;
+
+            message.Content = newContent.Trim();
+            message.IsEdited = true;
+            message.EditedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            // Konuşmadaki herkese bildir
+            var participants = await _context.ConversationParticipants
+                .Where(cp => cp.ConversationId == message.ConversationId)
+                .Select(cp => cp.UserId)
+                .ToListAsync();
+
+            var messageDto = new
+            {
+                id = message.Id,
+                content = message.Content,
+                isEdited = true,
+                editedAt = message.EditedAt?.ToString("HH:mm"),
+                 isRead = message.IsRead
+            };
+
+            foreach (var participantId in participants)
+            {
+                if (_userConnections.TryGetValue(participantId, out var connectionId))
+                {
+                    await Clients.Client(connectionId).SendAsync("MessageEdited", messageDto);
+                }
+            }
+        }
+
+        // Mesaj okundu olarak işaretle
+        public async Task MarkMessageAsRead(int messageId)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            var message = await _context.Messages.FindAsync(messageId);
+
+            if (message == null || message.SenderId == userId)
+                return; // Kendi mesajını okuma olarak işaretleyemez
+
+            if (!message.IsRead)
+            {
+                message.IsRead = true;
+                message.ReadAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                // Gönderene bildir (mavi tik için)
+                if (_userConnections.TryGetValue(message.SenderId, out var connectionId))
+                {
+                    await Clients.Client(connectionId).SendAsync("MessageRead", messageId);
+                }
+            }
+        }
+        // Konuşmadaki tüm mesajları okundu olarak işaretle
+        public async Task MarkConversationAsRead(int conversationId)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            var unreadMessages = await _context.Messages
+                .Where(m => m.ConversationId == conversationId
+                            && m.SenderId != userId
+                            && !m.IsRead
+                            && !m.IsDeleted)
+                .ToListAsync();
+
+            if (unreadMessages.Any())
+            {
+                var now = DateTime.UtcNow;
+
+                foreach (var message in unreadMessages)
+                {
+                    message.IsRead = true;
+                    message.ReadAt = now;
+                }
+
+                await _context.SaveChangesAsync();
+
+                // Her mesajın gönderenine bildir
+                var senderIds = unreadMessages.Select(m => m.SenderId).Distinct();
+
+                foreach (var senderId in senderIds)
+                {
+                    if (_userConnections.TryGetValue(senderId, out var connectionId))
+                    {
+                        var messageIds = unreadMessages
+                            .Where(m => m.SenderId == senderId)
+                            .Select(m => m.Id)
+                            .ToList();
+
+                        await Clients.Client(connectionId).SendAsync("MessagesRead", messageIds);
+                    }
+                }
+
+                // ✨ YENİ - Sohbet listesini güncelle
+                if (_userConnections.TryGetValue(userId, out var userConnectionId))
+                {
+                    await Clients.Client(userConnectionId).SendAsync("ConversationRead", conversationId);
+                }
+            }
         }
     }
 }

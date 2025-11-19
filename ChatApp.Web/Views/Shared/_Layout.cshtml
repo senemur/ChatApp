@@ -66,5 +66,45 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     @await RenderSectionAsync("Scripts", required: false)
+
+    @if (User.Identity.IsAuthenticated)
+    {
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+        <script>
+            // Sadece Conversation sayfası DEĞİLSE global bağlantı kur
+            if (!window.location.href.includes('/Chat/Conversation/')) {
+                const globalConnection = new signalR.HubConnectionBuilder()
+                    .withUrl("/chathub")
+                    .withAutomaticReconnect()
+                    .build();
+
+                globalConnection.start()
+                    .then(() => console.log("✅ Global SignalR bağlantısı aktif"))
+                    .catch(err => console.error("❌ Global bağlantı hatası:", err));
+
+                // Tarayıcı bildirimi
+                globalConnection.on("UpdateConversationList", (data) => {
+                    if (data.isUnread && "Notification" in window && Notification.permission === "granted") {
+                        new Notification(data.senderName, {
+                            body: data.lastMessage,
+                            icon: '/favicon.ico'
+                        });
+                    }
+
+                    // Sayfa başlığı güncellemesi
+                    document.title = `(1) ${data.senderName} - ChatApp`;
+                    setTimeout(() => {
+                        document.title = '@ViewData["Title"] - ChatApp';
+                    }, 3000);
+                });
+
+                // Bildirim izni iste
+                if ("Notification" in window && Notification.permission === "default") {
+                    Notification.requestPermission();
+                }
+            }
+        </script>
+    }
+
 </body>
 </html>

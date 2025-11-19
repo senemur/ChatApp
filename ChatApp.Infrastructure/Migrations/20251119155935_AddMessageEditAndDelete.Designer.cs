@@ -4,6 +4,7 @@ using ChatApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ChatApp.Infrastructure.Migrations
 {
     [DbContext(typeof(ChatDbContext))]
-    partial class ChatDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251119155935_AddMessageEditAndDelete")]
+    partial class AddMessageEditAndDelete
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -94,9 +97,6 @@ namespace ChatApp.Infrastructure.Migrations
 
                     b.Property<bool>("IsRead")
                         .HasColumnType("bit");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<string>("SenderId")
                         .IsRequired()

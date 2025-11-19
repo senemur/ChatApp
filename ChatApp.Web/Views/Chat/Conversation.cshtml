@@ -78,7 +78,7 @@
                 @{
                     DateTime? lastDate = null;
                 }
-                @foreach (var message in Model.Messages.OrderBy(m => m.SentAt))
+                @foreach (var message in Model.Messages.OrderBy(m => m.SentAt).Where(m => !m.IsDeleted))
                 {
                     var isMine = message.SenderId == userId;
                     var messageDate = message.SentAt.ToLocalTime().Date;
@@ -105,18 +105,35 @@
                         lastDate = messageDate;
                     }
 
-                    <div class="message-wrapper @(isMine ? "mine" : "theirs")">
+                    <div class="message-wrapper @(isMine ? "mine" : "theirs")" data-message-id="@message.Id">
+                        @if (isMine)
+                        {
+                            <button class="message-options message-options-btn" onclick="showMessageMenu(event, @message.Id)">⋮</button>
+                        }
                         <div class="message-bubble @(isMine ? "mine" : "theirs")">
                             @if (Model.IsGroup && !isMine)
                             {
                                 <div class="message-sender">@message.Sender.DisplayName</div>
                             }
-                            <div class="message-content">@message.Content</div>
+                            <div class="message-content" id="message-content-@message.Id">
+                                @message.Content
+                            </div>
                             <div class="message-time">
                                 @message.SentAt.ToLocalTime().ToString("HH:mm")
+                                @if (message.IsEdited)
+                                {
+                                    <span class="edited-badge">düzenlendi</span>
+                                }
                                 @if (isMine)
                                 {
-                                    <span class="message-status">✓✓</span>
+                                    @if (message.ReadAt.HasValue || message.IsRead)
+                                    {
+                                        <span class="message-status read">✓✓</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="message-status sent">✓</span>
+                                    }
                                 }
                             </div>
                         </div>
@@ -171,13 +188,7 @@
             })
             .catch(err => console.error("❌ Bağlantı hatası:", err));
 
-        // Mesaj alma
-        connection.on("ReceiveMessage", (message) => {
-            if (message.conversationId === conversationId) {
-                addMessageToUI(message, message.senderId === currentUserId);
-                scrollToBottom();
-            }
-        });
+   
 
         // Yazıyor göstergesi
         connection.on("UserTyping", (userId, userName) => {
@@ -251,17 +262,34 @@
 
             const messageWrapper = document.createElement("div");
             messageWrapper.className = `message-wrapper ${isMine ? "mine" : "theirs"}`;
+            messageWrapper.setAttribute('data-message-id', message.id);
+
+            let optionsButton = '';
+            if (isMine) {
+                optionsButton = `<button class="message-options message-options-btn" onclick="showMessageMenu(event, ${message.id})">⋮</button>`;
+            }
+
+            let statusIcon = '';
+            if (isMine) {
+                // ReadAt veya isRead varsa mavi tik, yoksa gri tek tik
+                if (message.readAt || message.isRead) {
+                    statusIcon = '<span class="message-status read">✓✓</span>';
+                } else {
+                    statusIcon = '<span class="message-status sent">✓</span>';
+                }
+            }
 
             messageWrapper.innerHTML = `
-                        <div class="message-bubble ${isMine ? "mine" : "theirs"}">
-                            ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender">${escapeHtml(message.senderName)}</div>` : ''}
-                            <div class="message-content">${escapeHtml(message.content)}</div>
-                            <div class="message-time">
-                                ${message.sentAt}
-                                ${isMine ? '<span class="message-status">✓</span>' : ''}
-                            </div>
-                        </div>
-                    `;
+                ${optionsButton}
+                <div class="message-bubble ${isMine ? "mine" : "theirs"}">
+                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender">${escapeHtml(message.senderName)}</div>` : ''}
+                    <div class="message-content" id="message-content-${message.id}">${escapeHtml(message.content)}</div>
+                    <div class="message-time">
+                        ${message.sentAt}
+                        ${statusIcon}
+                    </div>
+                </div>
+            `;
 
             messagesDiv.appendChild(messageWrapper);
         }
@@ -292,11 +320,238 @@
             }
         });
 
-        // Sayfa yüklenince
+        // Sayfa yüklendiğinde mesajları okundu işaretle
         window.addEventListener("load", () => {
             scrollToBottom();
             document.getElementById("messageInput").focus();
+
+            // ✨ Biraz gecikme ekle (DOM tamamen yüklensin)
+            setTimeout(() => {
+                connection.invoke("MarkConversationAsRead", conversationId)
+                    .then(() => console.log("✅ Konuşma okundu olarak işaretlendi"))
+                    .catch(err => console.error("❌ Mark as read hatası:", err));
+            }, 500);
         });
+
+        // Mesaj geldiğinde okundu olarak işaretle
+        connection.on("ReceiveMessage", (message) => {
+            if (message.conversationId === conversationId) {
+                addMessageToUI(message, message.senderId === currentUserId);
+                scrollToBottom();
+
+                // ✨ Eğer bizim mesajımız değilse, HEMEN okundu olarak işaretle
+                if (message.senderId !== currentUserId) {
+                    setTimeout(() => {
+                        connection.invoke("MarkMessageAsRead", message.id)
+                            .then(() => console.log(`✅ Mesaj ${message.id} okundu işaretlendi`))
+                            .catch(err => console.error("❌ Mark as read hatası:", err));
+                    }, 300);
+                }
+            }
+        });
+
+        // Mesajlar okundu bildirimi (gönderen için)
+        connection.on("MessagesRead", (messageIds) => {
+            console.log("✅ Mesajlar okundu:", messageIds);
+            messageIds.forEach(messageId => {
+                updateMessageReadStatus(messageId, true);
+            });
+        });
+
+        // Tek mesaj okundu bildirimi
+        connection.on("MessageRead", (messageId) => {
+            console.log("✅ Mesaj okundu:", messageId);
+            updateMessageReadStatus(messageId, true);
+        });
+
+        // Mesaj durumu güncelleme
+        function updateMessageReadStatus(messageId, isRead) {
+            const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (!messageWrapper) {
+                console.log("⚠️ Mesaj bulunamadı:", messageId);
+                return;
+            }
+
+            const timeDiv = messageWrapper.querySelector('.message-time');
+            if (!timeDiv) return;
+
+            const statusSpan = timeDiv.querySelector('.message-status');
+            if (statusSpan) {
+                if (isRead) {
+                    statusSpan.className = 'message-status read';
+                    statusSpan.textContent = '✓✓';
+                    console.log("✅ Tik güncellendi:", messageId);
+                } else {
+                    statusSpan.className = 'message-status sent';
+                    statusSpan.textContent = '✓';
+                }
+            }
+        }
+
+
+
+        // Mesaj menüsü
+        let currentMessageMenu = null;
+
+        function showMessageMenu(event, messageId) {
+            event.stopPropagation();
+            event.preventDefault();
+
+            // Eski menüyü kapat
+            if (currentMessageMenu) {
+                currentMessageMenu.remove();
+            }
+
+            // Yeni menü oluştur
+            const menu = document.createElement('div');
+            menu.className = 'message-menu';
+            menu.innerHTML = `
+                <div class="message-menu-item" onclick="editMessage(${messageId})">
+                    ✏️ Düzenle
+                </div>
+                <div class="message-menu-item delete" onclick="deleteMessage(${messageId})">
+                    🗑️ Sil
+                </div>
+            `;
+
+            document.body.appendChild(menu);
+
+            // Pozisyonla (appendChild'den SONRA)
+            const rect = event.target.getBoundingClientRect();
+            menu.style.position = 'absolute';
+            menu.style.top = (rect.bottom + 5) + 'px';
+            menu.style.left = (rect.left -70) + 'px';
+            menu.style.zIndex = '9999';
+
+            currentMessageMenu = menu;
+        }
+
+        // Menüyü kapat
+        document.addEventListener('click', () => {
+            if (currentMessageMenu) {
+                currentMessageMenu.remove();
+                currentMessageMenu = null;
+            }
+        });
+
+        // Mesaj silme
+        async function deleteMessage(messageId) {
+            if (!confirm('Bu mesajı silmek istediğinizden emin misiniz?')) {
+                return;
+            }
+
+            try {
+                await connection.invoke("DeleteMessage", messageId);
+
+                // UI'dan kaldır
+                const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (messageWrapper) {
+                    messageWrapper.style.animation = 'fadeOut 0.3s ease';
+                    setTimeout(() => messageWrapper.remove(), 300);
+                }
+            } catch (err) {
+                console.error("Silme hatası:", err);
+                alert("Mesaj silinemedi!");
+            }
+        }
+
+        // Mesaj düzenleme
+        function editMessage(messageId) {
+            const messageContent = document.getElementById(`message-content-${messageId}`);
+            const currentText = messageContent.textContent.trim();
+
+            // Modal oluştur
+            const modal = document.createElement('div');
+            modal.className = 'edit-modal';
+            modal.innerHTML = `
+                <div class="edit-modal-content">
+                    <h5 style="margin-bottom: 15px;">Mesajı Düzenle</h5>
+                    <textarea id="editTextarea">${escapeHtml(currentText)}</textarea>
+                    <div class="edit-modal-buttons">
+                        <button class="btn btn-secondary" onclick="closeEditModal()">İptal</button>
+                        <button class="btn btn-primary" onclick="saveEdit(${messageId})">Kaydet</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            document.getElementById('editTextarea').focus();
+
+            window.currentEditModal = modal;
+        }
+
+        function closeEditModal() {
+            if (window.currentEditModal) {
+                window.currentEditModal.remove();
+                window.currentEditModal = null;
+            }
+        }
+
+        async function saveEdit(messageId) {
+            const newContent = document.getElementById('editTextarea').value.trim();
+
+            if (!newContent) {
+                alert('Mesaj boş olamaz!');
+                return;
+            }
+
+            try {
+                await connection.invoke("EditMessage", messageId, newContent);
+                closeEditModal();
+            } catch (err) {
+                console.error("Düzenleme hatası:", err);
+                alert("Mesaj düzenlenemedi!");
+            }
+        }
+
+        // SignalR mesaj silme dinleyicisi
+        connection.on("MessageDeleted", (messageId) => {
+            const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
+            if (messageWrapper) {
+                messageWrapper.style.animation = 'fadeOut 0.3s ease';
+                setTimeout(() => messageWrapper.remove(), 300);
+            }
+        });
+
+        // SignalR mesaj düzenleme dinleyicisi
+        connection.on("MessageEdited", (message) => {
+            const messageWrapper = document.querySelector(`[data-message-id="${message.id}"]`);
+            if (!messageWrapper) return;
+
+            const contentDiv = messageWrapper.querySelector('.message-content');
+            if (contentDiv) {
+                contentDiv.textContent = message.content;
+            }
+
+            const timeDiv = messageWrapper.querySelector('.message-time');
+            if (timeDiv) {
+                // Düzenlendi badge'i ekle (eğer yoksa)
+                if (!timeDiv.querySelector('.edited-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'edited-badge';
+                    badge.textContent = 'düzenlendi';
+
+                    const statusSpan = timeDiv.querySelector('.message-status');
+                    if (statusSpan) {
+                        timeDiv.insertBefore(badge, statusSpan);
+                    } else {
+                        timeDiv.appendChild(badge);
+                    }
+                }
+
+                // ✨ Mavi tik durumu KORUNUR (değiştirilmez)
+            }
+        });
+
+        // Animasyon CSS'i ekle
+        const style = document.createElement('style');
+        style.textContent = `
+        @@keyframes fadeOut {
+                from { opacity: 1; transform: scale(1); }
+                to { opacity: 0; transform: scale(0.8); }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>

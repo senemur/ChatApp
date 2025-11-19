@@ -617,3 +617,174 @@ button, a {
     -webkit-user-select: none;
     user-select: none;
 }
+
+/* ===== Mesaj Menüsü (Sağ Tık / Uzun Bas) ===== */
+.message-menu {
+    position: absolute;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    padding: 4px 0;
+    z-index: 1000;
+    min-width: 150px;
+}
+
+.message-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    .message-menu-item:hover {
+        background-color: var(--hover-bg);
+    }
+
+    .message-menu-item.delete {
+        color: #dc3545;
+    }
+
+/* Mesaj üzerine hover'da menü butonu */
+.message-wrapper:hover .message-options {
+    opacity: 1;
+}
+
+.message-options {
+    top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.message-wrapper.mine .message-options {
+    left: -30px;
+}
+
+.message-wrapper.theirs .message-options {
+    right: -30px;
+}
+
+.message-options-btn {
+    background: rgba(0, 0, 0, 0.1);
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+}
+
+    .message-options-btn:hover {
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+/* Düzenleniyor badge */
+.edited-badge {
+    font-size: 0.65rem;
+    color: rgba(0, 0, 0, 0.4);
+    font-style: italic;
+    margin-left: 4px;
+}
+
+/* Edit modal */
+.edit-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.edit-modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+    .edit-modal-content textarea {
+        width: 100%;
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        padding: 10px;
+        resize: vertical;
+        min-height: 80px;
+        font-size: 0.95rem;
+    }
+
+        .edit-modal-content textarea:focus {
+            outline: none;
+            border-color: var(--whatsapp-green);
+        }
+
+.edit-modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+/* Mesaj durumu - Tek/Çift Tik */
+.message-status {
+    font-size: 0.75rem;
+    margin-left: 3px;
+}
+
+    .message-status.sent {
+        color: rgba(0, 0, 0, 0.45); /* Gri tek tik */
+    }
+
+    .message-status.read {
+        color: #53bdeb; /* Mavi çift tik */
+    }
+
+/* ===== Okunmamış Mesaj Badge'i ===== */
+.unread-badge {
+    background-color: var(--whatsapp-green);
+    color: white;
+    border-radius: 50%;
+    min-width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0 6px;
+}
+
+/* Okunmamış mesajı olan sohbet */
+.list-group-item.has-unread {
+    background-color: #f0f9ff;
+}
+
+    .list-group-item.has-unread:hover {
+        background-color: #e0f2fe;
+    }
+
+/* Okunmamış mesaj varsa bold */
+.conversation-name.fw-bold {
+    font-weight: 600 !important;
+    color: var(--text-primary);
+}
+
+.conversation-last-message.fw-semibold {
+    font-weight: 500 !important;
+    color: var(--text-primary);
+}
+
+.conversation-time.text-success {
+    color: var(--whatsapp-green) !important;
+}
