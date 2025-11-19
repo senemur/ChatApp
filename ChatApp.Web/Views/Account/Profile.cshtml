@@ -1,0 +1,134 @@
+﻿@model ChatApp.Domain.Entities.User
+@{
+    ViewData["Title"] = "Profilim";
+}
+
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-body p-4">
+                    <h2 class="mb-4">👤 Profilim</h2>
+
+                    @if (TempData["Success"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @TempData["Success"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    @if (TempData["Error"] != null)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            @TempData["Error"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <!-- Profil Fotoğrafı -->
+                    <div class="text-center mb-4">
+                        @if (!string.IsNullOrEmpty(Model.ProfilePicture))
+                        {
+                            <img src="@Model.ProfilePicture"
+                                 alt="Profil Fotoğrafı"
+                                 class="profile-picture-large mb-3"
+                                 style="width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid var(--whatsapp-green);" />
+                        }
+                        else
+                        {
+                            <div class="profile-picture-placeholder mb-3"
+                                 style="width: 150px; height: 150px; margin: 0 auto; border-radius: 50%; background: linear-gradient(135deg, var(--whatsapp-teal) 0%, var(--whatsapp-green) 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 4rem; font-weight: 600;">
+                                @Model.DisplayName.Substring(0, 1).ToUpper()
+                            </div>
+                        }
+
+                        <form asp-action="UploadProfilePicture" method="post" enctype="multipart/form-data" class="mt-3">
+                            <div class="mb-3">
+                                <input type="file"
+                                       class="form-control"
+                                       id="profilePicture"
+                                       name="profilePicture"
+                                       accept="image/*"
+                                       required />
+                                <small class="text-muted">JPG, PNG, GIF - Max 5MB</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">📸 Fotoğraf Yükle</button>
+
+                            @if (!string.IsNullOrEmpty(Model.ProfilePicture))
+                            {
+                                <button type="button" class="btn btn-outline-danger" onclick="deleteProfilePicture()">
+                                    🗑️ Fotoğrafı Sil
+                                </button>
+                            }
+                        </form>
+                    </div>
+
+                    <hr />
+
+                    <!-- Kullanıcı Bilgileri -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Görünen Ad</label>
+                        <input type="text" class="form-control" value="@Model.DisplayName" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Kullanıcı Adı</label>
+                        <input type="text" class="form-control" value="@Model.UserName" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Email</label>
+                        <input type="text" class="form-control" value="@Model.Email" readonly />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Hesap Oluşturma</label>
+                        <input type="text" class="form-control" value="@Model.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")" readonly />
+                    </div>
+
+                    <div class="mt-4">
+                        <a asp-controller="Chat" asp-action="Index" class="btn btn-secondary">
+                            ← Sohbetlere Dön
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form id="deleteForm" asp-action="DeleteProfilePicture" method="post" style="display: none;">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <script>
+        function deleteProfilePicture() {
+            if (confirm('Profil fotoğrafınızı silmek istediğinizden emin misiniz?')) {
+                document.getElementById('deleteForm').submit();
+            }
+        }
+
+        // Dosya seçildiğinde önizleme
+        document.getElementById('profilePicture').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = document.querySelector('.profile-picture-large, .profile-picture-placeholder');
+                    if (img.tagName === 'IMG') {
+                        img.src = event.target.result;
+                    } else {
+                        const newImg = document.createElement('img');
+                        newImg.src = event.target.result;
+                        newImg.className = 'profile-picture-large mb-3';
+                        newImg.style.cssText = 'width: 150px; height: 150px; border-radius: 50%; object-fit: cover; border: 4px solid var(--whatsapp-green);';
+                        img.replaceWith(newImg);
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
+}

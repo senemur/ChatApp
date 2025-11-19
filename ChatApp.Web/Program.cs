@@ -3,6 +3,7 @@ using ChatApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using System.Security.Cryptography;
+using ChatApp.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,9 @@ builder.Services.AddControllersWithViews();
 
 // SignalR
 builder.Services.AddSignalR();
+
+// File Upload Service
+builder.Services.AddScoped<ChatApp.Application.Services.IFileUploadService, ChatApp.Application.Services.FileUploadService>();
 
 // Database Configuration
 builder.Services.AddDbContext<ChatDbContext>(options =>

@@ -1,4 +1,5 @@
-﻿using ChatApp.Domain.Entities;
+﻿using ChatApp.Application.Services;
+using ChatApp.Domain.Entities;
 using ChatApp.Web.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -9,11 +10,13 @@ namespace ChatApp.Web.Controllers
     {
         private readonly UserManager<User> _userManager;
         private readonly SignInManager<User> _signInManager;
+        private readonly IFileUploadService _fileUploadService;
 
-        public AccountController(UserManager<User> userManager, SignInManager<User> signInManager)
+        public AccountController(UserManager<User> userManager, SignInManager<User> signInManager, IFileUploadService fileUploadService)
         {
             _userManager = userManager;
             _signInManager = signInManager;
+            _fileUploadService = fileUploadService;
         }
 
         // GET: /Account/Register
@@ -93,6 +96,77 @@ namespace ChatApp.Web.Controllers
         {
             await _signInManager.SignOutAsync();
             return RedirectToAction("Index", "Home");
+        }
+
+        // GET: /Account/Profile
+        [HttpGet]
+        public async Task<IActionResult> Profile()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return RedirectToAction("Login");
+
+            return View(user);
+        }
+
+        // POST: /Account/UploadProfilePicture
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadProfilePicture(IFormFile profilePicture)
+        {
+            if (profilePicture == null || profilePicture.Length == 0)
+            {
+                TempData["Error"] = "Lütfen bir resim seçin";
+                return RedirectToAction("Profile");
+            }
+
+            try
+            {
+                var user = await _userManager.GetUserAsync(User);
+                if (user == null)
+                    return RedirectToAction("Login");
+
+                // Eski fotoğrafı sil
+                if (!string.IsNullOrEmpty(user.ProfilePicture))
+                {
+                    _fileUploadService.DeleteFile(user.ProfilePicture);
+                }
+
+                // Yeni fotoğrafı yükle
+                var fileUrl = await _fileUploadService.UploadProfilePictureAsync(profilePicture, user.Id);
+
+                user.ProfilePicture = fileUrl;
+                await _userManager.UpdateAsync(user);
+
+                TempData["Success"] = "Profil fotoğrafı güncellendi";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = ex.Message;
+            }
+
+            return RedirectToAction("Profile");
+        }
+
+        // POST: /Account/DeleteProfilePicture
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteProfilePicture()
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null)
+                return RedirectToAction("Login");
+
+            if (!string.IsNullOrEmpty(user.ProfilePicture))
+            {
+                _fileUploadService.DeleteFile(user.ProfilePicture);
+                user.ProfilePicture = null;
+                await _userManager.UpdateAsync(user);
+
+                TempData["Success"] = "Profil fotoğrafı silindi";
+            }
+
+            return RedirectToAction("Profile");
         }
     }
 }
