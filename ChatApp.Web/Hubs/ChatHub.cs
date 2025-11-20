@@ -293,5 +293,54 @@ namespace ChatApp.Web.Hubs
                 }
             }
         }
+
+        public async Task SendImageMessage(int conversationId, int messageId)
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            var message = await _context.Messages
+                .Include(m => m.Sender)
+                .FirstOrDefaultAsync(m => m.Id == messageId);
+
+            if (message == null || message.SenderId != userId)
+                return;
+
+            // Konuşmadaki diğer kullanıcılara resmi gönder
+            var participants = await _context.ConversationParticipants
+                .Where(cp => cp.ConversationId == conversationId)
+                .Select(cp => cp.UserId)
+                .ToListAsync();
+
+            var messageDto = new
+            {
+                id = message.Id,
+                conversationId = message.ConversationId,
+                senderId = message.SenderId,
+                senderName = message.Sender.DisplayName,
+                content = message.Content, // Image URL
+                sentAt = message.SentAt.ToString("HH:mm"),
+                isRead = false,
+                type = "image"
+            };
+
+            foreach (var participantId in participants)
+            {
+                if (_userConnections.TryGetValue(participantId, out var connectionId))
+                {
+                    await Clients.Client(connectionId).SendAsync("ReceiveMessage", messageDto);
+
+                    // Sohbet listesi güncellemesi
+                    await Clients.Client(connectionId).SendAsync("UpdateConversationList", new
+                    {
+                        conversationId = conversationId,
+                        lastMessage = "📷 Fotoğraf",
+                        lastMessageTime = message.SentAt.ToString("HH:mm"),
+                        senderId = message.SenderId,
+                        senderName = message.Sender.DisplayName,
+                        isUnread = participantId != userId
+                    });
+                }
+            }
+        }
     }
 }

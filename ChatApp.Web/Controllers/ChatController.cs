@@ -1,4 +1,5 @@
-﻿using ChatApp.Domain.Entities;
+﻿using ChatApp.Application.Services;
+using ChatApp.Domain.Entities;
 using ChatApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,11 +14,13 @@ namespace ChatApp.Web.Controllers
     {
         private readonly ChatDbContext _context;
         private readonly UserManager<User> _userManager;
+        private readonly IFileUploadService _fileUploadService;
 
-        public ChatController(ChatDbContext context, UserManager<User> userManager)
+        public ChatController(ChatDbContext context, UserManager<User> userManager, IFileUploadService fileUploadService)
         {
             _context = context;
             _userManager = userManager;
+            _fileUploadService = fileUploadService;
         }
         // GET: /Chat
         public async Task<IActionResult> Index()
@@ -208,6 +211,54 @@ namespace ChatApp.Web.Controllers
                 isEdited = message.IsEdited,
                 editedAt = message.EditedAt?.ToLocalTime().ToString("HH:mm")
             });
+        }
+
+        // POST: /Chat/UploadImage
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadImage(IFormFile file, int conversationId)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                // Konuşmaya erişim kontrolü
+                var hasAccess = await _context.ConversationParticipants
+                    .AnyAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId);
+
+                if (!hasAccess)
+                    return Forbid();
+
+                // Resmi yükle
+                var imageUrl = await _fileUploadService.UploadMessageImageAsync(file);
+
+                // Mesajı kaydet
+                var message = new Message
+                {
+                    ConversationId = conversationId,
+                    SenderId = userId,
+                    Content = imageUrl, // Resim URL'ini content'e kaydet
+                    SentAt = DateTime.UtcNow,
+                    IsRead = false,
+                    Type = MessageType.Image, // Resim tipi
+                    ReadAt = null
+                };
+
+                _context.Messages.Add(message);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    messageId = message.Id,
+                    imageUrl = imageUrl,
+                    sentAt = message.SentAt.ToString("HH:mm")
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
     }
 }

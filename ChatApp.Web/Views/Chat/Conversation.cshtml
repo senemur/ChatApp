@@ -1,4 +1,5 @@
-﻿@model ChatApp.Domain.Entities.Conversation
+﻿@using ChatApp.Domain.Entities
+@model ChatApp.Domain.Entities.Conversation
 @{
     ViewData["Title"] = "Sohbet";
     Layout = null;
@@ -27,6 +28,7 @@
     </style>
 </head>
 <body style="margin: 0; padding: 0;">
+    @Html.AntiForgeryToken()
     <div class="chat-container">
         <!-- Header -->
         <div class="chat-header">
@@ -83,7 +85,7 @@
                     var isMine = message.SenderId == userId;
                     var messageDate = message.SentAt.ToLocalTime().Date;
 
-                    // Tarih separator
+                    // Tarih separator (önceki gibi)
                     if (lastDate == null || messageDate != lastDate)
                     {
                         <div class="date-separator">
@@ -110,33 +112,73 @@
                         {
                             <button class="message-options message-options-btn" onclick="showMessageMenu(event, @message.Id)">⋮</button>
                         }
-                        <div class="message-bubble @(isMine ? "mine" : "theirs")">
-                            @if (Model.IsGroup && !isMine)
-                            {
-                                <div class="message-sender">@message.Sender.DisplayName</div>
-                            }
-                            <div class="message-content" id="message-content-@message.Id">
-                                @message.Content
-                            </div>
-                            <div class="message-time">
-                                @message.SentAt.ToLocalTime().ToString("HH:mm")
-                                @if (message.IsEdited)
+
+                        @if (message.Type == MessageType.Image)
+                        {
+                            <!-- Resim Mesajı -->
+                            <div class="message-bubble has-image @(isMine ? "mine" : "theirs")">
+                                @if (Model.IsGroup && !isMine)
                                 {
-                                    <span class="edited-badge">düzenlendi</span>
+                                    <div class="message-sender" style="padding: 8px 8px 4px;">@message.Sender.DisplayName</div>
                                 }
-                                @if (isMine)
-                                {
-                                    @if (message.ReadAt.HasValue || message.IsRead)
+                                <div class="image-wrapper">
+                                    <img src="@message.Content"
+                                         alt="Resim"
+                                         class="message-image"
+                                         onclick="openImageModal('@message.Content')"
+                                         loading="lazy" />
+                                </div>
+                                <div class="message-time" style="padding: 4px 8px;">
+                                    @message.SentAt.ToLocalTime().ToString("HH:mm")
+                                    @if (message.IsEdited)
                                     {
-                                        <span class="message-status read">✓✓</span>
+                                        <span class="edited-badge">düzenlendi</span>
                                     }
-                                    else
+                                    @if (isMine)
                                     {
-                                        <span class="message-status sent">✓</span>
+                                        @if (message.ReadAt.HasValue || message.IsRead)
+                                        {
+                                            <span class="message-status read">✓✓</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="message-status sent">✓</span>
+                                        }
                                     }
-                                }
+                                </div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <!-- Text Mesajı (önceki gibi) -->
+                            <div class="message-bubble @(isMine ? "mine" : "theirs")">
+                                @if (Model.IsGroup && !isMine)
+                                {
+                                    <div class="message-sender">@message.Sender.DisplayName</div>
+                                }
+                                <div class="message-content" id="message-content-@message.Id">
+                                    @message.Content
+                                </div>
+                                <div class="message-time">
+                                    @message.SentAt.ToLocalTime().ToString("HH:mm")
+                                    @if (message.IsEdited)
+                                    {
+                                        <span class="edited-badge">düzenlendi</span>
+                                    }
+                                    @if (isMine)
+                                    {
+                                        @if (message.ReadAt.HasValue || message.IsRead)
+                                        {
+                                            <span class="message-status read">✓✓</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="message-status sent">✓</span>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
                 }
             </div>
@@ -156,6 +198,15 @@
         <!-- Input Area -->
         <div class="chat-input-container">
             <form id="messageForm" class="chat-input-wrapper">
+
+                <!-- Resim Yükleme Butonu -->
+                <label class="file-upload-btn" title="Resim gönder">
+                    📎
+                    <input type="file"
+                           id="imageInput"
+                           accept="image/*"
+                           onchange="handleImageUpload(event)" />
+                </label>
                 <input type="text"
                        id="messageInput"
                        class="form-control"
@@ -166,6 +217,11 @@
                     <span>➤</span>
                 </button>
             </form>
+        </div>
+        <!-- Upload Progress -->
+        <div id="uploadProgress" style="display: none;" class="upload-progress">
+            <div>📤 Yükleniyor...</div>
+            <div class="upload-progress-bar" id="progressBar" style="width: 0%;"></div>
         </div>
     </div>
 
@@ -552,6 +608,181 @@
             }
         `;
         document.head.appendChild(style);
+
+        // Resim yükleme
+        async function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Dosya boyutu kontrolü (5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('Dosya boyutu 5MB\'dan küçük olmalıdır!');
+                event.target.value = '';
+                return;
+            }
+
+            // Dosya tipi kontrolü
+            if (!file.type.startsWith('image/')) {
+                alert('Sadece resim dosyaları yüklenebilir!');
+                event.target.value = '';
+                return;
+            }
+
+            // Progress göster
+            const progressDiv = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('progressBar');
+            progressDiv.style.display = 'block';
+            progressBar.style.width = '0%';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('conversationId', conversationId);
+
+                // CSRF token ekle
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+                if (token) {
+                    formData.append('__RequestVerificationToken', token);
+                }
+
+                // Progress simülasyonu
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += 10;
+                    if (progress <= 90) {
+                        progressBar.style.width = progress + '%';
+                    }
+                }, 100);
+
+                const response = await fetch('/Chat/UploadImage', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+
+                if (response.ok) {
+                    const result = await response.json();
+
+                    // SignalR ile resmi gönder
+                    await connection.invoke("SendImageMessage", conversationId, result.messageId);
+
+                    // Input'u temizle
+                    event.target.value = '';
+
+                    setTimeout(() => {
+                        progressDiv.style.display = 'none';
+                    }, 500);
+                } else {
+                    const error = await response.json();
+                    alert('Yükleme hatası: ' + (error.message || 'Bilinmeyen hata'));
+                }
+            } catch (err) {
+                console.error('Upload error:', err);
+                alert('Resim yüklenemedi!');
+            } finally {
+                progressDiv.style.display = 'none';
+                event.target.value = '';
+            }
+        }
+
+        // Resmi büyüt (modal)
+        function openImageModal(imageUrl) {
+            const modal = document.createElement('div');
+            modal.className = 'image-modal';
+            modal.innerHTML = `
+                <button class="image-modal-close" onclick="closeImageModal()">×</button>
+                <img src="${imageUrl}" alt="Resim" />
+            `;
+
+            modal.onclick = function (e) {
+                if (e.target === modal) {
+                    closeImageModal();
+                }
+            };
+
+            document.body.appendChild(modal);
+            document.body.style.overflow = 'hidden';
+
+            window.currentImageModal = modal;
+        }
+
+        function closeImageModal() {
+            if (window.currentImageModal) {
+                window.currentImageModal.remove();
+                window.currentImageModal = null;
+                document.body.style.overflow = 'auto';
+            }
+        }
+
+        // ESC tuşu ile modal kapat
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && window.currentImageModal) {
+                closeImageModal();
+            }
+        });
+
+        // addMessageToUI fonksiyonunu güncelle
+        function addMessageToUI(message, isMine) {
+            const messagesDiv = document.getElementById("messagesList");
+
+            const messageWrapper = document.createElement("div");
+            messageWrapper.className = `message-wrapper ${isMine ? "mine" : "theirs"}`;
+            messageWrapper.setAttribute('data-message-id', message.id);
+
+            let optionsButton = '';
+            if (isMine) {
+                optionsButton = `<button class="message-options message-options-btn" onclick="showMessageMenu(event, ${message.id})">⋮</button>`;
+            }
+
+            let contentHtml = '';
+            let bubbleClass = '';
+
+            if (message.type === 'image') {
+                // Resim mesajı
+                bubbleClass = 'has-image';
+                contentHtml = `
+                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender" style="padding: 8px 8px 4px;">${escapeHtml(message.senderName)}</div>` : ''}
+                    <div class="image-wrapper">
+                        <img src="${escapeHtml(message.content)}"
+                             alt="Resim"
+                             class="message-image"
+                             onclick="openImageModal('${escapeHtml(message.content)}')"
+                             loading="lazy" />
+                    </div>
+                `;
+            } else {
+                // Text mesajı
+                contentHtml = `
+                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender">${escapeHtml(message.senderName)}</div>` : ''}
+                    <div class="message-content" id="message-content-${message.id}">${escapeHtml(message.content)}</div>
+                `;
+            }
+
+            let statusIcon = '';
+            if (isMine) {
+                if (message.readAt || message.isRead) {
+                    statusIcon = '<span class="message-status read">✓✓</span>';
+                } else {
+                    statusIcon = '<span class="message-status sent">✓</span>';
+                }
+            }
+
+            messageWrapper.innerHTML = `
+                ${optionsButton}
+                <div class="message-bubble ${bubbleClass} ${isMine ? "mine" : "theirs"}">
+                    ${contentHtml}
+                    <div class="message-time" ${bubbleClass ? 'style="padding: 4px 8px;"' : ''}>
+                        ${message.sentAt}
+                        ${statusIcon}
+                    </div>
+                </div>
+            `;
+
+            messagesDiv.appendChild(messageWrapper);
+        }
+
     </script>
 </body>
 </html>
