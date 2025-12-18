@@ -25,6 +25,78 @@
             height: 100%;
             overflow: hidden;
         }
+        
+        /* New Styles */
+        .action-button {
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 10px;
+            color: #54656f;
+            transition: color 0.2s;
+        }
+        .action-button:hover {
+            color: #008069;
+        }
+        
+        .emoji-picker-popup {
+            position: absolute;
+            bottom: 70px;
+            left: 20px;
+            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .recording-overlay {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 20px;
+            z-index: 10;
+        }
+        
+        .recording-indicator {
+            display: flex;
+            align-items: center;
+            color: #d0393e;
+            font-weight: bold;
+        }
+        
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #d0393e;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1s infinite;
+        }
+        
+        @@keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* Audio Player Style */
+        .audio-player-wrapper {
+            display: flex;
+            align-items: center;
+            min-width: 250px;
+            padding: 5px;
+        }
+        audio {
+            width: 100%;
+            height: 40px;
+        }
     </style>
 </head>
 <body style="margin: 0; padding: 0;">
@@ -148,6 +220,33 @@
                                 </div>
                             </div>
                         }
+                        else if (message.Type == MessageType.Audio)
+                        {
+                            <!-- Sesli Mesaj -->
+                            <div class="message-bubble has-audio @(isMine ? "mine" : "theirs")">
+                                @if (Model.IsGroup && !isMine)
+                                {
+                                    <div class="message-sender">@message.Sender.DisplayName</div>
+                                }
+                                <div class="audio-player-wrapper">
+                                    <audio controls src="@message.Content"></audio>
+                                </div>
+                                <div class="message-time">
+                                    @message.SentAt.ToLocalTime().ToString("HH:mm")
+                                    @if (isMine)
+                                    {
+                                        @if (message.ReadAt.HasValue || message.IsRead)
+                                        {
+                                            <span class="message-status read">✓✓</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="message-status sent">✓</span>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
                         else
                         {
                             <!-- Text Mesajı (önceki gibi) -->
@@ -198,25 +297,47 @@
         <!-- Input Area -->
         <div class="chat-input-container">
             <form id="messageForm" class="chat-input-wrapper">
+                <!-- Emoji Button -->
+                <button type="button" id="emojiBtn" class="action-button" title="Emoji ekle">😊</button>
+                
+                <!-- Emoji Picker Container -->
+                <div class="emoji-picker-popup" id="emojiPickerPopup" style="display: none;">
+                    <emoji-picker></emoji-picker>
+                </div>
 
                 <!-- Resim Yükleme Butonu -->
-                <label class="file-upload-btn" title="Resim gönder">
+                <label class="file-upload-btn action-button" title="Resim gönder">
                     📎
                     <input type="file"
                            id="imageInput"
                            accept="image/*"
                            onchange="handleImageUpload(event)" />
                 </label>
+                
                 <input type="text"
                        id="messageInput"
                        class="form-control"
                        placeholder="Bir mesaj yazın"
                        autocomplete="off"
                        maxlength="1000" />
-                <button type="submit" class="send-button">
+                       
+                <!-- Mic Button -->
+                <button type="button" id="micBtn" class="action-button" title="Sesli mesaj">🎤</button>
+                
+                <button type="submit" class="send-button" id="sendBtn">
                     <span>➤</span>
                 </button>
             </form>
+            
+            <!-- Recording Overlay -->
+             <div id="recordingOverlay" style="display: none;" class="recording-overlay">
+                <div class="recording-indicator">
+                    <div class="recording-dot"></div>
+                    <span id="recordingTime">00:00</span>
+                </div>
+                <button type="button" id="cancelRecordingBtn" class="btn btn-sm btn-danger rounded-circle ms-3">✕</button>
+                <button type="button" id="sendRecordingBtn" class="btn btn-sm btn-success rounded-circle ms-2">✓</button>
+            </div>
         </div>
         <!-- Upload Progress -->
         <div id="uploadProgress" style="display: none;" class="upload-progress">
@@ -225,6 +346,7 @@
         </div>
     </div>
 
+    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@@^1/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>
         const conversationId = @Model.Id;
@@ -752,6 +874,14 @@
                              loading="lazy" />
                     </div>
                 `;
+            } else if (message.type === 'audio') {
+                // Sesli mesaj
+                contentHtml = `
+                    ${!isMine && @Model.IsGroup.ToString().ToLower() ? `<div class="message-sender">${escapeHtml(message.senderName)}</div>` : ''}
+                    <div class="audio-player-wrapper">
+                        <audio controls src="${escapeHtml(message.content)}"></audio>
+                    </div>
+                `;
             } else {
                 // Text mesajı
                 contentHtml = `
@@ -781,6 +911,172 @@
             `;
 
             messagesDiv.appendChild(messageWrapper);
+        }
+        
+        // --- Emoji Logic ---
+        document.getElementById('emojiBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const popup = document.getElementById('emojiPickerPopup');
+            popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        document.querySelector('emoji-picker').addEventListener('emoji-click', (event) => {
+            const input = document.getElementById('messageInput');
+            input.value += event.detail.unicode;
+            input.focus();
+        });
+        
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('emojiPickerPopup');
+            const btn = document.getElementById('emojiBtn');
+            if (!popup.contains(e.target) && e.target !== btn) {
+                popup.style.display = 'none';
+            }
+        });
+        
+        // --- Voice Recording Logic ---
+        let mediaRecorder;
+        let audioChunks = [];
+        let recordingInterval;
+        let startTime;
+        
+        const micBtn = document.getElementById('micBtn');
+        const recordingOverlay = document.getElementById('recordingOverlay');
+        const recordingTime = document.getElementById('recordingTime');
+        const cancelBtn = document.getElementById('cancelRecordingBtn');
+        const sendRecBtn = document.getElementById('sendRecordingBtn');
+        
+        micBtn.addEventListener('click', async () => {
+             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert('Tarayıcınız ses kaydını desteklemiyor.');
+                return;
+            }
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    // Stop tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                mediaRecorder.start();
+                startTime = Date.now();
+                updateRecordingTime();
+                recordingInterval = setInterval(updateRecordingTime, 1000);
+                
+                recordingOverlay.style.display = 'flex';
+                
+            } catch (err) {
+                console.error("Mic Error:", err);
+                alert("Mikrofona erişilemedi.");
+            }
+        });
+        
+        function updateRecordingTime() {
+            const diff = Math.floor((Date.now() - startTime) / 1000);
+            const min = Math.floor(diff / 60).toString().padStart(2, '0');
+            const sec = (diff % 60).toString().padStart(2, '0');
+            recordingTime.textContent = `${min}:${sec}`;
+        }
+        
+        cancelBtn.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            clearInterval(recordingInterval);
+            recordingOverlay.style.display = 'none';
+        });
+        
+        sendRecBtn.addEventListener('click', () => {
+             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                // Define onstop behavior for SEND
+                mediaRecorder.onstop = async () => {
+                    // Stop tracks (default behavior also)
+                     if (mediaRecorder.stream) {
+                         mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                     }
+                     
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    await uploadVoice(audioBlob);
+                };
+                
+                mediaRecorder.stop();
+                clearInterval(recordingInterval);
+                recordingOverlay.style.display = 'none';
+            }
+        });
+        
+        async function uploadVoice(blob) {
+            const formData = new FormData();
+            formData.append('file', blob, 'recording.webm');
+            formData.append('conversationId', conversationId);
+             
+             // CSRF
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            if (token) {
+                formData.append('__RequestVerificationToken', token);
+            }
+            
+            try {
+                const response = await fetch('/Chat/UploadVoice', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // SignalR bağlantısını kontrol et
+                    if (connection.state === signalR.HubConnectionState.Connected) {
+                        await connection.invoke("SendVoiceMessage", conversationId, result.messageId);
+                    } else {
+                        console.warn("SignalR bağlı değil, mesaj manuel ekleniyor. Durum:", connection.state);
+                        // Bağlantı yoksa bile UI'ı güncelle (mesaj DB'ye kaydedildi)
+                         const messageDto = {
+                            id: result.messageId,
+                            conversationId: conversationId,
+                            senderId: currentUserId,
+                            senderName: "Ben", 
+                            content: result.voiceUrl,
+                            sentAt: result.sentAt,
+                            isRead: false,
+                            type: "audio"
+                        };
+                        addMessageToUI(messageDto, true);
+                        scrollToBottom();
+                        
+                        // Bağlantıyı tekrar başlatmayı dene
+                        try {
+                            await connection.start();
+                            console.log("Bağlantı tekrar sağlandı");
+                        } catch (e) {
+                            console.error("Yeniden bağlanma hatası:", e);
+                        }
+                    }
+                    
+                } else {
+                    let errorMessage = "Sunucu hatası";
+                    try {
+                        const err = await response.json();
+                        errorMessage = err.message || errorMessage;
+                    } catch (e) {
+                         const text = await response.text();
+                         console.error("Non-JSON error response:", text);
+                         errorMessage = `Hata kodu: ${response.status}`; 
+                    }
+                    alert("Ses gönderilemedi: " + errorMessage);
+                }
+            } catch (err) {
+                 console.error("Upload Error:", err);
+                 alert("Ses yükleme hatası: " + err.message);
+            }
         }
 
     </script>

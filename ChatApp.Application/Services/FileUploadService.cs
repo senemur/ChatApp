@@ -12,6 +12,7 @@ namespace ChatApp.Application.Services
     {
         Task<string> UploadProfilePictureAsync(IFormFile file, string userId);
         Task<string> UploadMessageImageAsync(IFormFile file);
+        Task<string> UploadVoiceAsync(IFormFile file);
         bool DeleteFile(string filePath);
     }
 
@@ -19,15 +20,15 @@ namespace ChatApp.Application.Services
     {
         private readonly string _profilesPath;
         private readonly string _messagesPath;
-        private readonly long _maxFileSize = 5 * 1024 * 1024; // 5MB
-        private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+        private readonly long _maxFileSize = 10 * 1024 * 1024; // 10MB for audio/video might need more, keeping 5MB default but let's say 10
+        private readonly string[] _allowedImageExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
+        private readonly string[] _allowedAudioExtensions = { ".webm", ".mp3", ".wav", ".ogg", ".m4a" };
 
         public FileUploadService(IWebHostEnvironment env)
         {
             _profilesPath = Path.Combine(env.WebRootPath, "uploads", "profiles");
             _messagesPath = Path.Combine(env.WebRootPath, "uploads", "messages");
 
-            // Klasörleri oluştur (yoksa)
             Directory.CreateDirectory(_profilesPath);
             Directory.CreateDirectory(_messagesPath);
         }
@@ -38,20 +39,18 @@ namespace ChatApp.Application.Services
                 throw new ArgumentException("Dosya boş olamaz");
 
             if (file.Length > _maxFileSize)
-                throw new ArgumentException("Dosya boyutu 5MB'dan büyük olamaz");
+                throw new ArgumentException("Dosya boyutu çok büyük");
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!_allowedExtensions.Contains(extension))
+            if (!_allowedImageExtensions.Contains(extension))
                 throw new ArgumentException("Sadece resim dosyaları yüklenebilir");
 
-            // Eski profil fotoğrafını sil
             var oldFiles = Directory.GetFiles(_profilesPath, $"{userId}_*");
             foreach (var oldFile in oldFiles)
             {
                 File.Delete(oldFile);
             }
 
-            // Yeni dosya adı: userId_timestamp.extension
             var fileName = $"{userId}_{DateTime.UtcNow.Ticks}{extension}";
             var filePath = Path.Combine(_profilesPath, fileName);
 
@@ -69,13 +68,35 @@ namespace ChatApp.Application.Services
                 throw new ArgumentException("Dosya boş olamaz");
 
             if (file.Length > _maxFileSize)
-                throw new ArgumentException("Dosya boyutu 5MB'dan büyük olamaz");
+                throw new ArgumentException("Dosya boyutu çok büyük");
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!_allowedExtensions.Contains(extension))
+            if (!_allowedImageExtensions.Contains(extension))
                 throw new ArgumentException("Sadece resim dosyaları yüklenebilir");
 
-            // Dosya adı: guid_timestamp.extension
+            var fileName = $"{Guid.NewGuid()}_{DateTime.UtcNow.Ticks}{extension}";
+            var filePath = Path.Combine(_messagesPath, fileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            return $"/uploads/messages/{fileName}";
+        }
+
+        public async Task<string> UploadVoiceAsync(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                throw new ArgumentException("Dosya boş olamaz");
+
+            if (file.Length > _maxFileSize)
+                throw new ArgumentException("Dosya boyutu çok büyük");
+
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!_allowedAudioExtensions.Contains(extension))
+                throw new ArgumentException("Desteklenmeyen ses dosyası formatı");
+
             var fileName = $"{Guid.NewGuid()}_{DateTime.UtcNow.Ticks}{extension}";
             var filePath = Path.Combine(_messagesPath, fileName);
 

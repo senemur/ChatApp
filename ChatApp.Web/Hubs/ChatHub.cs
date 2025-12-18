@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Collections.Concurrent;
 
 namespace ChatApp.Web.Hubs
 {
@@ -11,7 +12,7 @@ namespace ChatApp.Web.Hubs
     public class ChatHub : Hub
     {
         private readonly ChatDbContext _context;
-        private static readonly Dictionary<string, string> _userConnections = new();
+        private static readonly ConcurrentDictionary<string, string> _userConnections = new();
 
         public ChatHub(ChatDbContext context)
         {
@@ -24,7 +25,7 @@ namespace ChatApp.Web.Hubs
 
             if (userId != null)
             {
-                _userConnections[userId] = Context.ConnectionId;
+                _userConnections.AddOrUpdate(userId, Context.ConnectionId, (_, _) => Context.ConnectionId);
 
                 // Kullanıcının LastSeenAt'ini güncelle
                 var user = await _context.Users.FindAsync(userId);
@@ -47,7 +48,7 @@ namespace ChatApp.Web.Hubs
 
             if (userId != null)
             {
-                _userConnections.Remove(userId);
+                _userConnections.TryRemove(userId, out _);
 
                 var user = await _context.Users.FindAsync(userId);
                 if (user != null)
@@ -60,6 +61,64 @@ namespace ChatApp.Web.Hubs
             }
 
             await base.OnDisconnectedAsync(exception);
+        }
+        
+        // ... (Other methods remain largely the same, just ensuring TryGetValue works with ConcurrentDictionary which mimics Dictionary here)
+
+           public async Task SendVoiceMessage(int conversationId, int messageId)
+        {
+            try 
+            {
+                var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var message = await _context.Messages
+                    .Include(m => m.Sender)
+                    .FirstOrDefaultAsync(m => m.Id == messageId);
+
+                if (message == null || message.SenderId != userId)
+                    return;
+
+                var participants = await _context.ConversationParticipants
+                    .Where(cp => cp.ConversationId == conversationId)
+                    .Select(cp => cp.UserId)
+                    .ToListAsync();
+
+                var messageDto = new
+                {
+                    id = message.Id,
+                    conversationId = message.ConversationId,
+                    senderId = message.SenderId,
+                    senderName = message.Sender?.DisplayName ?? "Bilinmeyen",
+                    content = message.Content, // Audio URL
+                    sentAt = message.SentAt.ToString("HH:mm"),
+                    isRead = false,
+                    type = "audio"
+                };
+
+                foreach (var participantId in participants)
+                {
+                    if (_userConnections.TryGetValue(participantId, out var connectionId))
+                    {
+                        await Clients.Client(connectionId).SendAsync("ReceiveMessage", messageDto);
+
+                        await Clients.Client(connectionId).SendAsync("UpdateConversationList", new
+                        {
+                            conversationId = conversationId,
+                            lastMessage = "🎤 Sesli Mesaj",
+                            lastMessageTime = message.SentAt.ToString("HH:mm"),
+                            senderId = message.SenderId,
+                            senderName = message.Sender?.DisplayName ?? "Bilinmeyen",
+                            isUnread = participantId != userId
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Hata oluşursa logla ama client'a patlama
+                Console.WriteLine($"SendVoiceMessage Error: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task SendMessage(int conversationId, string content)
@@ -342,5 +401,6 @@ namespace ChatApp.Web.Hubs
                 }
             }
         }
+
     }
 }

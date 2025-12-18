@@ -31,7 +31,9 @@
 
                                 var lastMessage = conversation.Messages.FirstOrDefault();
                                 var lastMessageText = lastMessage != null
-                                ? (lastMessage.SenderId == userId ? "Sen: " : "") + lastMessage.Content
+                                ? (lastMessage.SenderId == userId ? "Sen: " : "") + 
+                                  (lastMessage.Type == ChatApp.Domain.Entities.MessageType.Image ? "📷 Fotoğraf" : 
+                                  (lastMessage.Type == ChatApp.Domain.Entities.MessageType.Audio ? "🎤 Sesli Mesaj" : lastMessage.Content))
                                 : "Henüz mesaj yok";
                                 var lastMessageTime = lastMessage?.SentAt.ToLocalTime().ToString("HH:mm") ?? "";
 

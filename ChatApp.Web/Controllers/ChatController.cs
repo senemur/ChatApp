@@ -260,5 +260,56 @@ namespace ChatApp.Web.Controllers
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
+        // POST: /Chat/UploadVoice
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UploadVoice(IFormFile file, int conversationId)
+        {
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (file == null)
+                    return BadRequest(new { success = false, message = "Dosya yok" });
+
+                // Konuşmaya erişim kontrolü
+                var hasAccess = await _context.ConversationParticipants
+                    .AnyAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId);
+
+                if (!hasAccess)
+                    return Forbid();
+
+                // Sesi yükle
+                var voiceUrl = await _fileUploadService.UploadVoiceAsync(file);
+
+                // Mesajı kaydet
+                var message = new Message
+                {
+                    ConversationId = conversationId,
+                    SenderId = userId,
+                    Content = voiceUrl, // URL
+                    SentAt = DateTime.UtcNow,
+                    IsRead = false,
+                    Type = MessageType.Audio,
+                    ReadAt = null
+                };
+
+                _context.Messages.Add(message);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    messageId = message.Id,
+                    voiceUrl = voiceUrl,
+                    sentAt = message.SentAt.ToString("HH:mm")
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
     }
 }
